@@ -1,0 +1,66 @@
+cd /root/kubernetes
+
+
+[root@master-249-160 kubernetes]# cat opsuser-csr.json 
+{
+  "CN": "opsuser",
+  "hosts": [],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "BeiJing",
+      "L": "BeiJing",
+      "O": "k8s",
+      "OU": "System"
+    }
+  ]
+}
+
+#生成客户端证书
+[root@master-1 kubernetes]# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem \
+-config=ca-config.json \
+-profile=kubernetes opsuser-csr.json | cfssljson -bare opsuser
+
+#配置授权
+[root@master-1 kubernetes]# cd /root/config
+
+# 设置集群参数
+[root@master-1 kubernetes]# export KUBE_APISERVER="https://192.168.91.254:6443"
+[root@master-1 kubernetes]# kubectl config set-cluster kubernetes \
+--certificate-authority=/etc/kubernetes/ssl/ca.pem \
+--server=${KUBE_APISERVER} \
+--kubeconfig=opsuser.kubeconfig
+
+# 设置客户端认证参数
+[root@master-1 kubernetes]# kubectl config set-credentials opsuser \
+--client-certificate=/etc/kubernetes/ssl/opsuser.pem \
+--client-key=/etc/kubernetes/ssl/opsuser-key.pem \
+--embed-certs=true \
+--kubeconfig=opsuser.kubeconfig
+
+
+# 设置上下文参数
+[root@master-1 kubernetes]# kubectl config set-context kubernetes \
+--cluster=kubernetes \
+--user=opsuser \
+--kubeconfig=opsuser.kubeconfig
+
+# 设置默认上下文
+[root@master-1 kubernetes]# kubectl config use-context \
+kubernetes --kubeconfig=opsuser.kubeconfig
+
+#配置权限
+[root@master-1 kubernetes]# kubectl create clusterrolebinding kubernetes \
+--clusterrole=cluster-admin --user=opsuser
+
+#测试指定配置文件连接
+[root@master-1 config]# kubectl get pod --kubeconfig=/root/config/opsuser.kubeconfig
+
+#scp认证文件到其它机器的 ~/.kube下面
+cd /root/kubernetes
+[root@master-249-160 kubernetes]# scp opsuser.kubeconfig 10.122.249.165:~/.kube/
+并改成config
